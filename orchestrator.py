@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import time
 import threading
 from pathlib import Path
@@ -27,8 +28,13 @@ from tempfile import NamedTemporaryFile
 
 from parser.md_parser import parse_markdown, ParsedDocument
 from structurer.llm_structurer import structure_presentation
+from structurer.context_detector import detect_context, DocumentContext
 from structurer.slide_types import PresentationBlueprint
 from renderer.slide_builder import render_presentation
+from renderer.pptx_stabilizer import (
+    validate_presentation_object, pre_save_checks,
+    post_save_validation, validate_pptx_file
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,36 +131,54 @@ def stage_save(prs, output_path: str) -> Path:
     if out.suffix.lower() != '.pptx':
         out = out.with_suffix('.pptx')
 
+    # Pre-save checks
+    warnings = pre_save_checks(prs)
+    if warnings:
+        logger.warning(f'Pre-save warnings: {warnings}')
+
     # Write to temporary file first for safety
+    tmp_path = None
     try:
         with NamedTemporaryFile(suffix='.pptx', delete=False) as tmp:
             tmp_path = Path(tmp.name)
         
+        logger.info(f'Saving to temporary file: {tmp_path}')
         prs.save(str(tmp_path))
         
         # Validate the temporary file exists and has content
         if not tmp_path.exists() or tmp_path.stat().st_size == 0:
             raise ValueError('PPTX file creation failed or is empty')
         
+        logger.info(f'Temporary file created: {tmp_path.stat().st_size} bytes')
+        
+        # Post-save validation of temp file
+        logger.info('Running post-save validation on temporary file...')
+        post_save_validation(str(tmp_path))
+        
         # Move temp file to final destination
         if out.exists():
             backup_path = out.with_stem(out.stem + '.backup')
-            out.rename(backup_path)
+            shutil.move(str(out), str(backup_path))
             logger.warning('Existing file backed up to: %s', backup_path)
         
-        tmp_path.replace(out)
+        # Use shutil.move() instead of Path.replace() for cross-drive compatibility
+        logger.info(f'Moving {tmp_path} to {out}')
+        shutil.move(str(tmp_path), str(out))
+        
+        # Final validation of output file
+        logger.info('Running final validation on output file...')
+        validate_pptx_file(str(out))
         
         size_kb = out.stat().st_size / 1024
         logger.info('Saved: %s (%.0f KB)', out, size_kb)
-        
-        # Cleanup temp file if it still exists
-        if tmp_path.exists():
-            tmp_path.unlink()
             
     except Exception as e:
         logger.error('Failed to save PPTX: %s', str(e))
-        if tmp_path.exists():
-            tmp_path.unlink()
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception as cleanup_err:
+                logger.warning(f'Could not delete temp file: {cleanup_err}')
         raise
 
     return out
@@ -162,32 +186,11 @@ def stage_save(prs, output_path: str) -> Path:
 
 def validate_pptx(prs) -> bool:
     """
-    Validate PPTX presentation integrity.
+    Validate PPTX presentation integrity using comprehensive checks.
     Returns True if valid, raises exception if invalid.
     """
-    if prs is None:
-        raise ValueError('Presentation object is None')
-    
-    if len(prs.slides) == 0:
-        raise ValueError('Presentation has no slides')
-    
-    # Check slide count is within expected range
-    if not (MIN_SLIDES <= len(prs.slides) <= MAX_SLIDES + 5):  # Allow some variance
-        logger.warning('Presentation has %d slides (expected %d-%d)',
-                      len(prs.slides), MIN_SLIDES, MAX_SLIDES)
-    
-    # Validate each slide has content
-    for i, slide in enumerate(prs.slides):
-        if slide is None:
-            raise ValueError(f'Slide {i} is None')
-        try:
-            # Try to access slide properties
-            _ = slide.shapes
-        except Exception as e:
-            raise ValueError(f'Slide {i} is corrupted: {str(e)}')
-    
-    logger.info('PPTX validation passed: %d slides', len(prs.slides))
-    return True
+    logger.info('Validating presentation object...')
+    return validate_presentation_object(prs)
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -233,6 +236,15 @@ def convert(
         _log('[.] Parsing markdown ...')
         doc = stage_parse(md_path)
         _log(f'     -> {len(doc.sections)} sections · {doc.word_count} words')
+        
+        _log('[!] Detecting document context ...')
+        context = detect_context(doc)
+        _log(f'     -> Type: {context.document_type} | Domain: {context.primary_domain}')
+        _log(f'     -> Tone: {context.tone} | Audience: {context.estimated_audience_level}')
+        _log(f'     -> Color scheme: {context.color_scheme} | Layout: {context.suggested_layout_emphasis}')
+        
+        # Store context in document for renderer to use
+        doc.context = context
 
         _log('[*] Structuring slides with Gemini ...')
         blueprint = stage_structure(doc, api_key, min_slides, max_slides, model_name)

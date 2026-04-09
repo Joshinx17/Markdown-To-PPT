@@ -5,10 +5,12 @@ Converts Markdown (`.md`) files into polished 10-15 slide `.pptx` presentations 
 ## Features
 
 - ✨ **Modern UI** - Professional web interface with drag-and-drop upload
-- 🎨 **Professional Design** - Contemporary teal and navy color scheme with modern typography
-- 🔒 **Stable & Reliable** - Enhanced error handling, file validation, PPTX integrity checks
+- 🎨 **Professional Design** - Contemporary teal and navy color scheme with modern typography  
+- 🔒 **Stable & Reliable** - Enhanced error handling, ZIP integrity validation, PPTX corruption prevention with multi-stage validation and post-save checks
 - 🧠 **AI-Powered** - Google Gemini integration for intelligent slide structuring
 - 📊 **Rich Slide Types** - 17 different slide layouts including charts, tables, timelines
+- 🎯 **Context-Aware Styling** - Automatically detects document type (technical, business, educational, training, research) and applies appropriate themes, colors, and layouts
+- 🌍 **Smart Theme Selection** - Dynamically chooses color schemes and layout emphasis based on content domain (AI/ML, Finance, Technology, etc.) and audience level
 - 🚀 **Flexible** - Use web UI, CLI, or Python API
 
 ## Quick Start - Web UI (Recommended)
@@ -93,6 +95,71 @@ python cli.py -i report.md -o output/report.pptx --model gemini-1.5-pro
 python cli.py -i report.md --api-key YOUR_KEY
 ```
 
+## Deployment as a Website
+
+To deploy this application as a public website, you can use Docker and a cloud platform like Azure App Service.
+
+### Using Docker
+
+1. Build the Docker image:
+   ```bash
+   docker build -t md-to-pptx .
+   ```
+
+2. Run locally to test:
+   ```bash
+   docker run -p 5000:5000 md-to-pptx
+   ```
+   Open http://localhost:5000
+
+### Deploy to Azure App Service
+
+1. **Prerequisites**:
+   - Azure CLI installed (`az` command)
+   - Azure subscription
+   - Docker installed locally
+
+2. **Login to Azure**:
+   ```bash
+   az login
+   ```
+
+3. **Create a resource group** (if needed):
+   ```bash
+   az group create --name mdppt-rg --location eastus
+   ```
+
+4. **Create an App Service plan**:
+   ```bash
+   az appservice plan create --name mdppt-plan --resource-group mdppt-rg --sku B1 --is-linux
+   ```
+
+5. **Create the web app**:
+   ```bash
+   az webapp create --resource-group mdppt-rg --plan mdppt-plan --name your-unique-app-name --deployment-container-image-name md-to-pptx:latest
+   ```
+
+6. **Set environment variables** (optional, for Gemini API):
+   ```bash
+   az webapp config appsettings set --resource-group mdppt-rg --name your-unique-app-name --setting GOOGLE_GENAI_API_KEY=your_api_key
+   ```
+
+7. **Deploy the image**:
+   ```bash
+   az webapp config container set --resource-group mdppt-rg --name your-unique-app-name --docker-custom-image-name md-to-pptx:latest --docker-registry-server-url https://index.docker.io
+   ```
+
+Your website will be available at `https://your-unique-app-name.azurewebsites.net`
+
+### Alternative: Deploy to Heroku
+
+1. Install Heroku CLI
+2. Login: `heroku login`
+3. Create app: `heroku create your-app-name`
+4. Set buildpack: `heroku buildpacks:set heroku/python`
+5. Deploy: `git push heroku main`
+6. Set environment variables: `heroku config:set GOOGLE_GENAI_API_KEY=your_key`
+
 ## How It Works
 
 1. **Parser** (`parser/md_parser.py`) - Parses Markdown into structured sections
@@ -105,16 +172,48 @@ python cli.py -i report.md --api-key YOUR_KEY
 ```
 Input (.md)
     ↓
+[Validate] - Check file integrity and size limits
+    ↓
 [Parse] - Extract structure, headings, content
     ↓
-[Structure] - Plan slide layout with Gemini or rules
+[Detect Context] - Analyze document type, tone, domain, audience
     ↓
-[Render] - Generate beautiful PPTX slides
+[Structure] - Plan slide layout with Gemini or rules + context-aware styling
     ↓
-[Validate] - Ensure PPTX integrity
+[Render] - Generate beautiful PPTX slides with theme from context
+    ↓
+[Validate] - Ensure PPTX integrity, check all slides and content
+    ↓
+[Post-Save Check] - Verify ZIP integrity and XML validity
     ↓
 Output (.pptx)
 ```
+
+### Context-Aware Styling
+
+The system automatically detects:
+- **Document Type**: Technical, Business, Educational, Training, Research, or General
+- **Content Domain**: AI/ML, Finance, Technology, Education, etc.
+- **Tone**: Formal, Casual, Technical, or Storytelling
+- **Audience Level**: Beginner, Intermediate, or Advanced
+- **Content Patterns**: Code blocks, diagrams, numerical data, tables
+
+Based on these factors, it:
+- **Selects appropriate color schemes**: Purple for AI/ML (modern), Blue for Finance (trust), Teal for Tech (innovation), Navy for Business (corporate), Green for Education (growth)
+- **Chooses layout emphasis**: Visual-focused for code/diagrams, Data-driven for analytics, Textual for general content
+- **Applies relevant slide types and transitions** that match the document's purpose
+
+### PPTX Stability & Integrity
+
+The system includes comprehensive safeguards:
+- **ZIP Integrity Validation**: Verifies PPTX file format and structure
+- **XML Structure Checks**: Validates all XML files within the PPTX
+- **Multi-stage Validation**: Checks presentation object, then temporary file, then final output
+- **Corruption Prevention**: Detects and prevents invalid shapes, text frames, and properties
+- **Automatic Backup**: Creates backup of existing files before overwriting
+- **Cross-drive file handling**: Safely moves files across disk drives on Windows
+
+These features prevent corruption that requires file repair and data loss.
 
 ## Supported Slide Types
 

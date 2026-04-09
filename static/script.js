@@ -28,6 +28,7 @@ const elements = {
     toggleApiKeyBtn: document.getElementById('toggleApiKey'),
     
     convertBtn: document.getElementById('convertBtn'),
+    btnSpinner: document.querySelector('.btn-spinner'),
     progressSection: document.getElementById('progressSection'),
     successSection: document.getElementById('successSection'),
     errorSection: document.getElementById('errorSection'),
@@ -107,8 +108,8 @@ function handleFileSelect(file) {
     // Update UI
     elements.selectedFileName.textContent = file.name;
     elements.selectedFileSize.textContent = formatFileSize(file.size);
-    elements.selectedFileInfo.style.display = 'flex';
-    elements.dropZone.style.display = 'none';
+    elements.selectedFileInfo.classList.remove('d-none');
+    elements.dropZone.classList.add('d-none');
     
     updateConvertButtonState();
 }
@@ -117,8 +118,8 @@ function handleFileSelect(file) {
 function clearFile() {
     state.selectedFile = null;
     elements.fileInput.value = '';
-    elements.selectedFileInfo.style.display = 'none';
-    elements.dropZone.style.display = 'block';
+    elements.selectedFileInfo.classList.add('d-none');
+    elements.dropZone.classList.remove('d-none');
     updateConvertButtonState();
 }
 
@@ -166,6 +167,11 @@ function setupButtons() {
 function updateConvertButtonState() {
     const enabled = state.selectedFile !== null && !state.isProcessing;
     elements.convertBtn.disabled = !enabled;
+    if (state.isProcessing) {
+        elements.btnSpinner.classList.remove('d-none');
+    } else {
+        elements.btnSpinner.classList.add('d-none');
+    }
 }
 
 // ─── Convert Handler ──────────────────────────────────────────────────────────
@@ -180,11 +186,11 @@ async function handleConvert(e) {
     updateConvertButtonState();
     
     // Hide all sections and show progress
-    document.querySelector('.upload-section').style.display = 'none';
-    document.querySelector('.config-section').style.display = 'none';
-    elements.successSection.style.display = 'none';
-    elements.errorSection.style.display = 'none';
-    elements.progressSection.style.display = 'grid';
+    document.getElementById('uploadSection').classList.add('d-none');
+    document.getElementById('configSection').classList.add('d-none');
+    elements.successSection.classList.add('d-none');
+    elements.errorSection.classList.add('d-none');
+    elements.progressSection.classList.remove('d-none');
     
     // Reset progress
     elements.progressFill.style.width = '0%';
@@ -254,8 +260,8 @@ async function handleConvert(e) {
 
 // ─── Show Success ──────────────────────────────────────────────────────────────
 function showSuccess(data, formData) {
-    elements.progressSection.style.display = 'none';
-    elements.successSection.style.display = 'grid';
+    elements.progressSection.classList.add('d-none');
+    elements.successSection.classList.remove('d-none');
     
     elements.successMessage.textContent = 
         `Your presentation is ready! (${data.size_mb} MB)`;
@@ -266,8 +272,8 @@ function showSuccess(data, formData) {
 
 // ─── Show Conversion Error ────────────────────────────────────────────────────
 function showConversionError(errorMsg) {
-    elements.progressSection.style.display = 'none';
-    elements.errorSection.style.display = 'grid';
+    elements.progressSection.classList.add('d-none');
+    elements.errorSection.classList.remove('d-none');
     
     elements.errorMessage.textContent = errorMsg;
 }
@@ -290,11 +296,11 @@ function resetUI() {
     elements.apiKey.value = '';
     
     // Show upload/config, hide others
-    document.querySelector('.upload-section').style.display = 'block';
-    document.querySelector('.config-section').style.display = 'block';
-    elements.progressSection.style.display = 'none';
-    elements.successSection.style.display = 'none';
-    elements.errorSection.style.display = 'none';
+    document.getElementById('uploadSection').classList.remove('d-none');
+    document.getElementById('configSection').classList.remove('d-none');
+    elements.progressSection.classList.add('d-none');
+    elements.successSection.classList.add('d-none');
+    elements.errorSection.classList.add('d-none');
     
     state.isProcessing = false;
     updateConvertButtonState();

@@ -28,7 +28,7 @@ from pptx.util import Inches, Pt, Emu
 from pptx.slide import Slide
 
 from renderer.theme import (
-    NAVY, NAVY_LIGHT, GOLD, GOLD_LIGHT,
+    NAVY, NAVY_LIGHT, TEAL, TEAL_LIGHT,
     WHITE, CARD_BG, TEXT_DARK, TEXT_BODY, TEXT_MUTED,
     FONT_HEADING, FONT_BODY, CHART_COLORS,
 )
@@ -183,7 +183,7 @@ def _process_flow_single_row(slide, steps, x, y, w, h):
             ay = box_y + box_h / 2 - Inches(0.13)
             arw = _add_shape(slide, _RIGHT_ARROW,
                              ax, ay, gap - Inches(0.08), Inches(0.26),
-                             fill=GOLD)
+                             fill=TEAL)
 
 
 def _process_flow_double_row(slide, steps, x, y, w, h):

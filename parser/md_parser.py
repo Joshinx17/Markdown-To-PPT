@@ -119,6 +119,7 @@ class ParsedDocument:
     has_tabular_data: bool = False
     raw_markdown: str = ''
     key_numbers: List[str] = field(default_factory=list)
+    context: Optional[Any] = None  # DocumentContext (populated by orchestrator)
 
 
 # ─── Table parser ────────────────────────────────────────────────────────────

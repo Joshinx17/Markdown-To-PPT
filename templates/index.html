@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meridian - Markdown to PowerPoint Converter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">📊</span>
+                    <div>
+                        <h1>Meridian</h1>
+                        <p>Professional Markdown to PowerPoint Converter</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div class="upload-card">
+                    <h2>Create Your Presentation</h2>
+                    <p class="section-subtitle">Convert your markdown document into a professional PowerPoint presentation</p>
+                    
+                    <!-- Drag & Drop Area -->
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-icon">📁</div>
+                        <h3>Drag and drop your markdown file</h3>
+                        <p>or click to browse</p>
+                        <p class="file-info">Supported: .md, .markdown, .txt (Max: {{ max_size_mb }} MB)</p>
+                        <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
+                    </div>
+
+                    <!-- Selected File Display -->
+                    <div id="selectedFileInfo" class="file-info-selected" style="display: none;">
+                        <div class="file-details">
+                            <span class="file-icon">📄</span>
+                            <div>
+                                <p class="file-name" id="selectedFileName"></p>
+                                <p class="file-size" id="selectedFileSize"></p>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-clear" id="clearFile">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Section -->
+            <div class="config-section">
+                <div class="config-card">
+                    <h3>⚙️ Configuration</h3>
+                    
+                    <div class="form-group">
+                        <label for="minSlides">Minimum Slides:</label>
+                        <div class="input-with-value">
+                            <input type="range" id="minSlides" class="slider" min="10" max="14" value="10">
+                            <span id="minSlidesValue">10</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxSlides">Maximum Slides:</label>
+                        <div class="input-with-value">
+                            <input type="range" id="maxSlides" class="slider" min="11" max="15" value="15">
+                            <span id="maxSlidesValue">15</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model">AI Model:</label>
+                        <select id="model" class="form-select">
+                            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Quality)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="apiKey">Google Gemini API Key:</label>
+                        <div class="api-key-input">
+                            <input type="password" id="apiKey" class="form-input" placeholder="Leave empty to use environment variable">
+                            <button type="button" id="toggleApiKey" class="btn-toggle-visibility">👁️</button>
+                        </div>
+                        <p class="helper-text">Optional if environment variable is set. Get key from <a href="https://aistudio.google.com/" target="_blank">aistudio.google.com</a></p>
+                    </div>
+
+                    <button type="button" id="convertBtn" class="btn-primary" disabled>
+                        <span class="btn-text">✨ Convert to PowerPoint</span>
+                        <span class="btn-spinner" style="display: none;"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Section (Hidden initially) -->
+            <div id="progressSection" class="progress-section" style="display: none;">
+                <div class="progress-card">
+                    <h3>Processing...</h3>
+                    <div class="progress-stages">
+                        <div class="stage" id="stage-validate">
+                            <span class="stage-icon">⏳</span>
+                            <span class="stage-name">Validating input</span>
+                        </div>
+                        <div class="stage" id="stage-parse">
+                            <span class="stage-icon">⏳</span>
+                            <span class="stage-name">Parsing markdown</span>
+                        </div>
+                        <div class="stage" id="stage-structure">
+                            <span class="stage-icon">⏳</span>
+                            <span class="stage-name">Structuring slides with AI</span>
+                        </div>
+                        <div class="stage" id="stage-render">
+                            <span class="stage-icon">⏳</span>
+                            <span class="stage-name">Rendering presentation</span>
+                        </div>
+                        <div class="stage" id="stage-save">
+                            <span class="stage-icon">⏳</span>
+                            <span class="stage-name">Saving file</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success Section (Hidden initially) -->
+            <div id="successSection" class="success-section" style="display: none;">
+                <div class="success-card">
+                    <div class="success-icon">✓</div>
+                    <h3>Presentation Ready!</h3>
+                    <p id="successMessage"></p>
+                    <div class="button-group">
+                        <a id="downloadBtn" href="#" class="btn-primary btn-download">
+                            <span>⬇️ Download PowerPoint</span>
+                        </a>
+                        <button type="button" id="startNewBtn" class="btn-secondary">Create Another</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Section (Hidden initially) -->
+            <div id="errorSection" class="error-section" style="display: none;">
+                <div class="error-card">
+                    <div class="error-icon">⚠️</div>
+                    <h3>Conversion Failed</h3>
+                    <p id="errorMessage"></p>
+                    <button type="button" id="tryAgainBtn" class="btn-secondary">Try Again</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Meridian | Professional Presentation Generator | <a href="https://github.com" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

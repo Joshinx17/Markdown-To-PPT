@@ -31,6 +31,7 @@ from renderer.theme import (
     NAVY, NAVY_LIGHT, TEAL, TEAL_LIGHT,
     WHITE, CARD_BG, TEXT_DARK, TEXT_BODY, TEXT_MUTED,
     FONT_HEADING, FONT_BODY, CHART_COLORS,
+    snap_to_grid,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ def _add_shape(slide: Slide, shape_id: int, x, y, w, h,
                fill: RGBColor, line_color: RGBColor = None,
                line_width: float = 0.0) -> object:
     """Add an auto-shape with solid fill and optional border."""
-    shape = slide.shapes.add_shape(shape_id, x, y, w, h)
+    shape = slide.shapes.add_shape(shape_id, snap_to_grid(x), snap_to_grid(y), w, h)
     shape.fill.solid()
     shape.fill.fore_color.rgb = fill
     if line_color and line_width:
@@ -65,7 +66,7 @@ def _add_text_box(slide: Slide, text: str, x, y, w, h,
                   align: PP_ALIGN = PP_ALIGN.LEFT,
                   font_name: str = FONT_BODY,
                   wrap: bool = True) -> None:
-    txb = slide.shapes.add_textbox(x, y, w, h)
+    txb = slide.shapes.add_textbox(snap_to_grid(x), snap_to_grid(y), w, h)
     tf  = txb.text_frame
     tf.word_wrap = wrap
     tf.auto_size = None

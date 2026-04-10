@@ -70,6 +70,12 @@ def _setup_logging(verbose: bool) -> None:
     help='Google Gemini API key. Falls back to GEMINI_API_KEY env var.',
 )
 @click.option(
+    '--template', '-t', 'template_path',
+    default=None,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help='Path to the shared Slide Master .pptx template. If omitted, templates/*.pptx is auto-detected.',
+)
+@click.option(
     '--model',
     default='gemini-2.0-flash',
     show_default=True,
@@ -88,6 +94,7 @@ def main(
     min_slides: int,
     max_slides: int,
     api_key: str | None,
+    template_path: str | None,
     model: str,
     verbose: bool,
 ) -> None:
@@ -126,6 +133,7 @@ def main(
     click.echo(f'  Input  : {input_path}')
     click.echo(f'  Output : {output_path}')
     click.echo(f'  Slides : {min_s}-{max_s}  (target {slides})')
+    click.echo(f'  Master : {template_path or "auto-detect from templates/"}')
     click.echo(f'  Model  : {model}')
     if api_key:
         click.echo('  Mode   : Gemini structuring + offline fallback\n')
@@ -139,6 +147,7 @@ def main(
             input_path=input_path,
             output_path=output_path,
             api_key=api_key,
+            template_path=template_path,
             min_slides=min_s,
             max_slides=max_s,
             model_name=model,

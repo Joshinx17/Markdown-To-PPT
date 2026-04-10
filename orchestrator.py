@@ -42,6 +42,13 @@ logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_MB = 5
 MAX_FILE_SIZE_B  = MAX_FILE_SIZE_MB * 1024 * 1024
+DEFAULT_TEMPLATE_CANDIDATES = (
+    Path(__file__).parent / 'templates' / 'Slide_Master.pptx',
+    Path(__file__).parent / 'templates' / 'Slide Master.pptx',
+    Path(__file__).parent / 'templates' / 'slide_master.pptx',
+    Path(__file__).parent / 'templates' / 'master.pptx',
+    Path(__file__).parent / 'templates' / 'template.pptx',
+)
 
 MIN_SLIDES = 10
 MAX_SLIDES = 15
@@ -76,6 +83,22 @@ def validate_input(input_path: str) -> Path:
 
     logger.info('Input validated: %s (%.1f KB)', p.name, size / 1024)
     return p
+
+
+def resolve_template_path(template_path: str | None) -> Path | None:
+    """Resolve an explicit or auto-discovered slide master path."""
+    candidates = [Path(template_path).expanduser().resolve()] if template_path else list(DEFAULT_TEMPLATE_CANDIDATES)
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file() and candidate.suffix.lower() == '.pptx':
+            logger.info('Using slide master template: %s', candidate)
+            return candidate
+
+    if template_path:
+        raise FileNotFoundError(f'Slide master template not found: {template_path}')
+
+    logger.warning('No slide master template found in templates/. Falling back to built-in renderer.')
+    return None
 
 
 def stage_parse(md_path: Path) -> ParsedDocument:
@@ -113,10 +136,10 @@ def stage_structure(
     return bp
 
 
-def stage_render(blueprint: PresentationBlueprint):
+def stage_render(blueprint: PresentationBlueprint, template_path: str | None = None):
     """Render the blueprint to a python-pptx Presentation object."""
     t0 = time.time()
-    prs = render_presentation(blueprint)
+    prs = render_presentation(blueprint, template_path=template_path)
     logger.info(
         'Stage RENDER completed in %.2fs — %d slides built',
         time.time() - t0, len(prs.slides),
@@ -199,6 +222,7 @@ def convert(
     input_path: str,
     output_path: str,
     api_key: str | None = None,
+    template_path: str | None = None,
     min_slides: int = MIN_SLIDES,
     max_slides: int = MAX_SLIDES,
     model_name: str = 'gemini-2.0-flash',
@@ -232,6 +256,7 @@ def convert(
         total_t0 = time.time()
         _log('[ ] Validating input ...')
         md_path = validate_input(input_path)
+        resolved_template = resolve_template_path(template_path)
 
         _log('[.] Parsing markdown ...')
         doc = stage_parse(md_path)
@@ -251,7 +276,11 @@ def convert(
         _log(f'     -> {blueprint.total_slides} slides planned')
 
         _log('[~] Rendering presentation ...')
-        prs = stage_render(blueprint)
+        if resolved_template:
+            _log(f'     -> Using slide master: {resolved_template.name}')
+        else:
+            _log('     -> No slide master detected, using renderer fallback')
+        prs = stage_render(blueprint, template_path=str(resolved_template) if resolved_template else None)
         
         _log('[✓] Validating PPTX integrity ...')
         validate_pptx(prs)

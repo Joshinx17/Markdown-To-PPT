@@ -1,6 +1,6 @@
 ﻿# MD -> PPTX: Meridian Presentation Generator
 
-Converts Markdown (`.md`) files into polished 10-15 slide `.pptx` presentations using Google Gemini when available, with a built-in offline fallback when it is not.
+Converts Markdown (`.md`) files into polished 10-15 slide `.pptx` presentations using Google Gemini when available, with a built-in offline fallback when it is not. When a shared Slide Master `.pptx` is present, the renderer loads that template and builds slides from its layouts/placeholders instead of starting from an independent theme.
 
 ## Features
 
@@ -85,6 +85,9 @@ If you omit `--input`, the CLI automatically picks the newest `.md` file inside 
 # Standard conversion
 python cli.py -i report.md -o output/report.pptx
 
+# Use the shared hackathon Slide Master explicitly
+python cli.py -i report.md -o output/report.pptx --template templates/Slide_Master.pptx
+
 # Bias toward a 14-slide deck
 python cli.py -i report.md -o output/report.pptx --slides 14
 
@@ -164,7 +167,7 @@ Your website will be available at `https://your-unique-app-name.azurewebsites.ne
 
 1. **Parser** (`parser/md_parser.py`) - Parses Markdown into structured sections
 2. **Structurer** (`structurer/`) - AI or rule-based slide planning
-3. **Renderer** (`renderer/`) - Converts blueprint to beautiful PowerPoint
+3. **Renderer** (`renderer/`) - Converts blueprint into a PowerPoint using the shared slide master when available
 4. **Orchestrator** (`orchestrator.py`) - Manages pipeline with validation & error handling
 
 ### Architecture
@@ -236,6 +239,11 @@ These features prevent corruption that requires file repair and data loss.
 - `QUOTE` - Highlighted quotations
 
 ## Design Language
+
+### Slide Master Support
+- Place the hackathon master file in `templates/` as `Slide_Master.pptx`, `Slide Master.pptx`, `slide_master.pptx`, `master.pptx`, or `template.pptx` for auto-detection
+- Or pass it explicitly with `--template path/to/master.pptx`
+- When a master is loaded, the renderer uses the master layouts and placeholders first and only falls back to custom drawing when the template is unavailable
 
 ### Modern Professional Theme ("Meridian")
 - **Primary Colors**: Deep Navy (#0D1E42) with vibrant Teal (#009EA6) accents
@@ -394,4 +402,3 @@ MIT License - see LICENSE file for details
 - Report issues on GitHub
 - Request features on Discussions
 - See [WEB_UI_README.md](WEB_UI_README.md) for web-specific documentation
-

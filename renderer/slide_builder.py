@@ -21,7 +21,7 @@ Modern Design Language: "Meridian Professional"
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -47,18 +47,264 @@ logger = logging.getLogger(__name__)
 
 # ─── Presentation factory ─────────────────────────────────────────────────────
 
-def create_presentation() -> Presentation:
-    """Return a blank widescreen 16:9 Presentation."""
-    prs = Presentation()
-    prs.slide_width  = T.SLIDE_W
-    prs.slide_height = T.SLIDE_H
+def create_presentation(template_path: Optional[str] = None) -> Presentation:
+    """Create a presentation from the shared template when provided."""
+    if template_path:
+        prs = Presentation(template_path)
+    else:
+        prs = Presentation()
+        prs.slide_width = T.SLIDE_W
+        prs.slide_height = T.SLIDE_H
+    setattr(prs, '_template_path', template_path)
     return prs
 
 
+def _presentation_uses_master(prs: Presentation) -> bool:
+    return bool(getattr(prs, '_template_path', None))
+
+
+def _find_layout(prs: Presentation, preferred_names: Sequence[str], fallback_index: int = 0):
+    normalized_names = {name.strip().lower() for name in preferred_names}
+    for layout in prs.slide_layouts:
+        if layout.name and layout.name.strip().lower() in normalized_names:
+            return layout
+    if len(prs.slide_layouts) > fallback_index:
+        return prs.slide_layouts[fallback_index]
+    return prs.slide_layouts[0]
+
+
 def _blank_slide(prs: Presentation) -> Slide:
-    """Add a blank (layout 6) slide and return it."""
-    blank_layout = prs.slide_layouts[6]   # index 6 = blank in default master
-    return prs.slides.add_slide(blank_layout)
+    """Add a blank slide using the active master when possible."""
+    blank_layout = _find_layout(prs, ('blank',), fallback_index=min(6, len(prs.slide_layouts) - 1))
+    slide = prs.slides.add_slide(blank_layout)
+    setattr(slide, '_uses_master_template', _presentation_uses_master(prs))
+    return slide
+
+
+def _add_slide_for_blueprint(prs: Presentation, bp: SlideBlueprint) -> Slide:
+    if not _presentation_uses_master(prs):
+        return _blank_slide(prs)
+
+    if bp.type == SlideType.TITLE:
+        layout = _find_layout(prs, ('title slide',), fallback_index=0)
+    elif bp.type == SlideType.SECTION_DIVIDER:
+        layout = _find_layout(prs, ('section header', 'section', 'title only'), fallback_index=2)
+    elif bp.type == SlideType.TWO_COLUMN:
+        layout = _find_layout(prs, ('two content', 'comparison', 'title and content'), fallback_index=3)
+    else:
+        layout = _find_layout(prs, ('title and content', 'title only', 'blank'), fallback_index=1)
+
+    slide = prs.slides.add_slide(layout)
+    setattr(slide, '_uses_master_template', True)
+    return slide
+
+
+def _slide_uses_master(slide: Slide) -> bool:
+    return bool(getattr(slide, '_uses_master_template', False))
+
+
+def _placeholder_type(shape):
+    if not getattr(shape, 'is_placeholder', False):
+        return None
+    try:
+        return shape.placeholder_format.type
+    except Exception:
+        return None
+
+
+def _get_title_placeholder(slide: Slide):
+    return slide.shapes.title
+
+
+def _get_subtitle_placeholder(slide: Slide):
+    for shape in slide.placeholders:
+        placeholder_type = _placeholder_type(shape)
+        if getattr(placeholder_type, 'name', '') == 'SUBTITLE':
+            return shape
+    return None
+
+
+def _get_body_placeholders(slide: Slide):
+    body_type_names = {'BODY', 'OBJECT', 'CONTENT', 'TEXT'}
+    matches = []
+    for shape in slide.placeholders:
+        if shape == slide.shapes.title:
+            continue
+        placeholder_type = _placeholder_type(shape)
+        if getattr(placeholder_type, 'name', '') in body_type_names:
+            matches.append(shape)
+    return matches
+
+
+def _set_text(shape, text: str) -> bool:
+    if shape is None or not hasattr(shape, 'text_frame'):
+        return False
+    tf = shape.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    if text:
+        tf.text = text
+    return True
+
+
+def _content_bounds(slide: Slide):
+    candidates = _get_body_placeholders(slide)
+    if candidates:
+        target = max(candidates, key=lambda shape: shape.width * shape.height)
+        return target.left, target.top, target.width, target.height
+    return T.CONTENT_X, T.CONTENT_Y, T.CONTENT_W, T.CONTENT_H
+
+
+def _bullets_to_text(bullets, limit: int = 6) -> str:
+    lines = []
+    for bullet in bullets[:limit]:
+        indent = '  ' * min(getattr(bullet, 'level', 0), 2)
+        lines.append(f'{indent}- {bullet.text[:160]}')
+    return '\n'.join(lines)
+
+
+def _summary_points_to_text(points) -> str:
+    return '\n'.join(
+        f'- {point.title}: {point.description[:180]}'
+        for point in points[:4]
+    )
+
+
+def _two_column_to_text(bp: SlideBlueprint) -> str:
+    lines = []
+    if bp.left_title:
+        lines.append(bp.left_title)
+        lines.extend(f'- {item[:140]}' for item in bp.left_bullets[:5])
+    if bp.right_title:
+        if lines:
+            lines.append('')
+        lines.append(bp.right_title)
+        lines.extend(f'- {item[:140]}' for item in bp.right_bullets[:5])
+    return '\n'.join(lines)
+
+
+def _comparison_to_text(items) -> str:
+    blocks = []
+    for item in items[:4]:
+        points = '\n'.join(f'- {point[:120]}' for point in item.points[:5])
+        blocks.append(f'{item.label}\n{points}'.strip())
+    return '\n\n'.join(blocks)
+
+
+def _takeaways_to_text(takeaways) -> str:
+    return '\n'.join(
+        f'- {takeaway.title}: {takeaway.description[:160]}'
+        for takeaway in takeaways[:6]
+    )
+
+
+def _steps_to_text(steps) -> str:
+    return '\n'.join(
+        f'- {step.title}: {step.description[:140]}'.rstrip(': ')
+        for step in steps[:6]
+    )
+
+
+def _events_to_text(events) -> str:
+    return '\n'.join(
+        f'- {event.date} | {event.title}: {event.description[:140]}'.rstrip(': ')
+        for event in events[:8]
+    )
+
+
+def _render_with_master(slide: Slide, bp: SlideBlueprint, deck_title: str, total: int) -> bool:
+    if not _slide_uses_master(slide):
+        return False
+
+    title_placeholder = _get_title_placeholder(slide)
+    if title_placeholder is not None:
+        _set_text(title_placeholder, bp.title[:120])
+
+    if bp.type == SlideType.TITLE:
+        subtitle_lines = [line for line in (bp.subtitle, bp.author, bp.date) if line]
+        subtitle_placeholder = _get_subtitle_placeholder(slide)
+        body_placeholder = subtitle_placeholder or (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, '\n'.join(subtitle_lines))
+        return True
+
+    if bp.type == SlideType.SECTION_DIVIDER:
+        body_placeholder = (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, bp.subtitle[:240] if bp.subtitle else '')
+        return True
+
+    if bp.type in {SlideType.AGENDA, SlideType.CONTENT_BULLETS, SlideType.CONTENT_TEXT}:
+        body_text = bp.body_text[:1000] if bp.body_text and not bp.bullets else _bullets_to_text(bp.bullets)
+        body_placeholder = (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, body_text)
+        return True
+
+    if bp.type == SlideType.EXECUTIVE_SUMMARY:
+        body_placeholder = (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, _summary_points_to_text(bp.summary_points))
+        return True
+
+    if bp.type == SlideType.TWO_COLUMN:
+        placeholders = _get_body_placeholders(slide)
+        if len(placeholders) >= 2:
+            _set_text(placeholders[0], '\n'.join(f'- {item[:140]}' for item in bp.left_bullets[:5]))
+            _set_text(placeholders[1], '\n'.join(f'- {item[:140]}' for item in bp.right_bullets[:5]))
+            if bp.left_title and not _get_title_placeholder(slide):
+                _set_text(placeholders[0], f'{bp.left_title}\n' + '\n'.join(f'- {item[:140]}' for item in bp.left_bullets[:5]))
+            return True
+
+        body_placeholder = (placeholders or [None])[0]
+        _set_text(body_placeholder, _two_column_to_text(bp))
+        return True
+
+    if bp.type == SlideType.TABLE:
+        x, y, w, h = _content_bounds(slide)
+        add_table(slide, x, y, w, h, bp.headers, bp.rows[:14], caption=bp.chart_caption)
+        return True
+
+    if bp.type in {SlideType.CHART_BAR, SlideType.CHART_PIE, SlideType.CHART_LINE, SlideType.CHART_AREA}:
+        x, y, w, h = _content_bounds(slide)
+        series_data = [(s.name, s.values) for s in bp.series]
+        if bp.type == SlideType.CHART_BAR:
+            add_bar_chart(slide, x, y, w, h, bp.categories, series_data, title=bp.chart_title, caption=bp.chart_caption)
+        elif bp.type == SlideType.CHART_PIE:
+            add_pie_chart(slide, x, y, w, h, bp.categories, bp.values, title=bp.chart_title, caption=bp.chart_caption)
+        elif bp.type == SlideType.CHART_LINE:
+            add_line_chart(slide, x, y, w, h, bp.categories, series_data, title=bp.chart_title, caption=bp.chart_caption)
+        else:
+            add_area_chart(slide, x, y, w, h, bp.categories, series_data, title=bp.chart_title, caption=bp.chart_caption)
+        return True
+
+    if bp.type == SlideType.PROCESS_FLOW:
+        x, y, w, h = _content_bounds(slide)
+        build_process_flow(slide, bp.steps, x=x, y=y, w=w, h=h)
+        return True
+
+    if bp.type == SlideType.TIMELINE:
+        x, y, w, h = _content_bounds(slide)
+        build_timeline(slide, bp.events, x=x, y=y, w=w, h=h)
+        return True
+
+    if bp.type == SlideType.COMPARISON:
+        placeholders = _get_body_placeholders(slide)
+        if len(placeholders) >= 2 and len(bp.comparison_items) >= 2:
+            for placeholder, item in zip(placeholders[:2], bp.comparison_items[:2]):
+                _set_text(placeholder, '\n'.join([item.label, *[f'- {point[:120]}' for point in item.points[:5]]]))
+            return True
+        x, y, w, h = _content_bounds(slide)
+        build_comparison(slide, bp.comparison_items, x=x, y=y, w=w, h=h)
+        return True
+
+    if bp.type == SlideType.CONCLUSION:
+        body_placeholder = (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, _takeaways_to_text(bp.takeaways))
+        return True
+
+    if bp.type == SlideType.QUOTE:
+        body_placeholder = (_get_body_placeholders(slide) or [None])[0]
+        _set_text(body_placeholder, bp.body_text[:400] or bp.title)
+        return True
+
+    return False
 
 
 # ─── Common structural elements ───────────────────────────────────────────────
@@ -82,8 +328,8 @@ def _add_header(slide: Slide, title: str, slide_num: int = 0, total: int = 0) ->
 
     # Title text (right of accent stripe)
     txb = slide.shapes.add_textbox(
-        T.ACCENT_BAR_W + Inches(0.25), Inches(0.18),
-        T.SLIDE_W - T.ACCENT_BAR_W - Inches(0.60), T.HEADER_H - Inches(0.40),
+        T.snap_to_grid(T.ACCENT_BAR_W + Inches(0.25)), T.snap_to_grid(Inches(0.18)),
+        T.snap_to_grid(T.SLIDE_W - T.ACCENT_BAR_W - Inches(0.60)), T.snap_to_grid(T.HEADER_H - Inches(0.40)),
     )
     tf = txb.text_frame
     tf.word_wrap = True
@@ -109,7 +355,7 @@ def _add_footer(slide: Slide, slide_num: int, total: int,
     # Deck title (left)
     if deck_title:
         txb = slide.shapes.add_textbox(
-            Inches(0.25), T.FOOTER_Y, T.SLIDE_W * 0.7, T.FOOTER_H,
+            T.snap_to_grid(Inches(0.25)), T.FOOTER_Y, T.SLIDE_W * 0.7, T.FOOTER_H,
         )
         tf = txb.text_frame
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -124,7 +370,7 @@ def _add_footer(slide: Slide, slide_num: int, total: int,
     # Slide number (right)
     num_text = f'{slide_num} / {total}' if total else str(slide_num)
     txb2 = slide.shapes.add_textbox(
-        T.SLIDE_W - Inches(1.2), T.FOOTER_Y, Inches(1.1), T.FOOTER_H,
+        T.snap_to_grid(T.SLIDE_W - Inches(1.2)), T.FOOTER_Y, Inches(1.1), T.FOOTER_H,
     )
     tf2 = txb2.text_frame
     tf2.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -517,8 +763,8 @@ def _build_content_bullets(slide: Slide, bp: SlideBlueprint, deck_title: str,
         return
 
     _add_bullet_list(slide, bp.bullets,
-                     T.CONTENT_X + Inches(0.20), content_y,
-                     T.CONTENT_W - Inches(0.20), T.CONTENT_H)
+                     T.snap_to_grid(T.CONTENT_X + Inches(0.20)), T.snap_to_grid(content_y),
+                     T.snap_to_grid(T.CONTENT_W - Inches(0.20)), T.snap_to_grid(T.CONTENT_H))
 
 
 def _build_two_column(slide: Slide, bp: SlideBlueprint, deck_title: str,
@@ -558,7 +804,7 @@ def _build_two_column(slide: Slide, bp: SlideBlueprint, deck_title: str,
         from structurer.slide_types import BulletItem
         bullet_objs = [BulletItem(text=b, level=0) for b in buls[:5]]
         _add_bullet_list(slide, bullet_objs,
-                         cx, items_y, col_w, col_h - Inches(0.68))
+                         T.snap_to_grid(cx), T.snap_to_grid(items_y), T.snap_to_grid(col_w), T.snap_to_grid(col_h - Inches(0.68)))
 
     # Divider line
     div_x = int(mid_x - Inches(0.04))
@@ -791,7 +1037,10 @@ _BUILDERS = {
 }
 
 
-def render_presentation(blueprint: PresentationBlueprint) -> Presentation:
+def render_presentation(
+    blueprint: PresentationBlueprint,
+    template_path: Optional[str] = None,
+) -> Presentation:
     """
     Convert a PresentationBlueprint into a fully rendered python-pptx
     Presentation object.
@@ -802,12 +1051,12 @@ def render_presentation(blueprint: PresentationBlueprint) -> Presentation:
     Returns:
         A python-pptx Presentation ready to be saved as .pptx
     """
-    prs = create_presentation()
+    prs = create_presentation(template_path=template_path)
     deck_title = blueprint.presentation_title
     total = blueprint.total_slides
 
     for bp in blueprint.slides:
-        slide = _blank_slide(prs)
+        slide = _add_slide_for_blueprint(prs, bp)
         builder = _BUILDERS.get(bp.type)
 
         if builder is None:
@@ -815,7 +1064,9 @@ def render_presentation(blueprint: PresentationBlueprint) -> Presentation:
             builder = _build_content_bullets
 
         try:
-            if bp.type == SlideType.TITLE:
+            if _render_with_master(slide, bp, deck_title, total):
+                pass
+            elif bp.type == SlideType.TITLE:
                 builder(slide, bp, deck_title)
             else:
                 builder(slide, bp, deck_title, bp.slide_number, total)

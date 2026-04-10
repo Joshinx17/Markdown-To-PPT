@@ -85,7 +85,14 @@ CONTENT_X   = Inches(0.55)
 CONTENT_Y   = HEADER_H + Inches(0.25)
 CONTENT_W   = SLIDE_W - MARGIN_L - MARGIN_R
 CONTENT_H   = FOOTER_Y - CONTENT_Y - Inches(0.15)
+# ─── Grid & Alignment System ───────────────────────────────────────────────────
+GRID_UNIT = Inches(0.125)  # 1/8 inch grid for fine alignment
+PADDING_INNER = Inches(0.1)  # inside elements
+SPACING_ELEMENTS = Inches(0.15)  # between elements
 
+def snap_to_grid(value):
+    """Snap a position/dimension to the nearest grid unit."""
+    return round(value / GRID_UNIT) * GRID_UNIT
 # ─── Modern design elements ─────────────────────────────────────────────────────
 ACCENT_BAR_W     = Inches(0.08)   # teal accent stripe width
 BORDER_RADIUS    = Pt(8)          # rounded corners for modern look
@@ -94,5 +101,3 @@ SHADOW_DISTANCE  = Pt(2)          # shadow offset
 LINE_WIDTH_THIN  = Pt(1.0)        # border widths
 LINE_WIDTH_MED   = Pt(1.5)
 LINE_WIDTH_THICK = Pt(2.5)
-
-ACCENT_BAR_W = Inches(0.18)  # left vertical accent stripe width

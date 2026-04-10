@@ -35,6 +35,7 @@ DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 app.config['UPLOAD_FOLDER'] = str(UPLOAD_FOLDER)
 app.config['DOWNLOAD_FOLDER'] = str(DOWNLOAD_FOLDER)
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
+app.config['PPTX_TEMPLATE_PATH'] = os.getenv('PPTX_TEMPLATE_PATH')
 
 ALLOWED_EXTENSIONS = {'.md', '.markdown', '.txt'}
 
@@ -133,6 +134,7 @@ def api_convert():
             str(input_path),
             str(output_path),
             api_key=api_key,
+            template_path=app.config.get('PPTX_TEMPLATE_PATH'),
             min_slides=min_slides,
             max_slides=max_slides,
             model_name=model_name,

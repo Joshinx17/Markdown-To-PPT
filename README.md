@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-﻿# MD -> PPTX: Meridian Presentation Generator
+# MD -> PPTX: Meridian Presentation Generator
 
 Converts Markdown (`.md`) files into polished 10-15 slide `.pptx` presentations using Google Gemini when available, with a built-in offline fallback when it is not. When a shared Slide Master `.pptx` is present, the renderer loads that template and builds slides from its layouts/placeholders instead of starting from an independent theme.
 

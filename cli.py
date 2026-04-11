@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / '.env')
 INPUT_DIR = Path(__file__).parent / 'input'
+OUTPUT_DIR = Path(__file__).parent / 'output'
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -101,6 +102,7 @@ def main(
     """Convert Markdown into a polished PowerPoint deck."""
     _setup_logging(verbose)
     INPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(exist_ok=True)
 
     if not api_key:
         api_key = os.getenv('GEMINI_API_KEY')
@@ -124,7 +126,7 @@ def main(
 
     if not output_path:
         inp = Path(input_path)
-        output_path = str(inp.parent / 'output' / f'{inp.stem}.pptx')
+        output_path = str(OUTPUT_DIR / f'{inp.stem}.pptx')
 
     min_s = max(min_slides, slides - 2)
     max_s = min(max_slides, slides + 2)

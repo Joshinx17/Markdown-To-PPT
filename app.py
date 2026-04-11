@@ -99,7 +99,7 @@ def api_convert():
         # Get options from form
         min_slides = int(request.form.get('minSlides', 10))
         max_slides = int(request.form.get('maxSlides', 15))
-        api_key = request.form.get('apiKey', '').strip() or os.getenv('GOOGLE_GENAI_API_KEY')
+        api_key = request.form.get('apiKey', '').strip() or os.getenv('GEMINI_API_KEY')
         model_name = request.form.get('model', 'gemini-2.0-flash')
 
         # Validate slide count

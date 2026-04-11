@@ -176,6 +176,33 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
         self.assertTrue(output_path.exists())
 
+    def test_convert_auto_discovers_templates_directory_file(self) -> None:
+        template_path = Path(__file__).resolve().parents[1] / 'templates' / '000_auto_detect_template.pptx'
+        template = Presentation()
+        template.slide_width = 9144000
+        template.slide_height = 5143500
+        template.save(str(template_path))
+
+        output_path = self.unique_output('auto_template_output')
+        try:
+            result = convert(
+                input_path=str(SAMPLE_PATH),
+                output_path=str(output_path),
+                api_key=None,
+                min_slides=10,
+                max_slides=12,
+                verbose=False,
+            )
+            self.assertTrue(output_path.exists())
+            prs = Presentation(str(result))
+            self.assertEqual(prs.slide_width, template.slide_width)
+            self.assertEqual(prs.slide_height, template.slide_height)
+        finally:
+            try:
+                template_path.unlink(missing_ok=True)
+            except PermissionError:
+                pass
+
 
 if __name__ == '__main__':
     unittest.main()

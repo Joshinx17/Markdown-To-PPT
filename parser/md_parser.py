@@ -21,9 +21,12 @@ from __future__ import annotations
 import re
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 
 # ─── Inline formatting cleaner ───────────────────────────────────────────────
 
@@ -32,7 +35,7 @@ _INLINE_RE = re.compile(
     r'|_{1,3}(.+?)_{1,3}'         # underscore variants
     r'|`(.+?)`'                   # inline code
     r'|\[([^\]]+)\]\([^)]*\)'    # markdown links → keep label
-    r'|!\[[^\]]*\]\([^)]*\)'     # images → drop
+    r'|!\[([^\]]*)\]\(([^)]+)\)'  # images → keep alt text
     r'|~~(.+?)~~',                # strike-through → keep text
     re.DOTALL,
 )
@@ -108,6 +111,12 @@ class MDSection:
 
 
 @dataclass
+class MDImage:
+    alt_text: str
+    url: str
+
+
+@dataclass
 class ParsedDocument:
     title: str
     subtitle: str = ''
@@ -119,6 +128,8 @@ class ParsedDocument:
     has_tabular_data: bool = False
     raw_markdown: str = ''
     key_numbers: List[str] = field(default_factory=list)
+    images: List[MDImage] = field(default_factory=list)
+    source_dir: Optional[Path] = None
     context: Optional[Any] = None  # DocumentContext (populated by orchestrator)
 
 
@@ -189,6 +200,7 @@ def parse_markdown(content: str) -> ParsedDocument:
     subtitle: str = ''
     sections: List[MDSection] = []
     tables: List[MDTable] = []
+    images: List[MDImage] = []
 
     # Stack: [(MDSection | None, level)]  — tracks nesting
     # We keep at most 3 levels deep (H1 → H2 → H3)
@@ -251,6 +263,15 @@ def parse_markdown(content: str) -> ParsedDocument:
         if in_code_block:
             code_buf.append(raw_line)
             continue
+
+        if '!' in raw_line and not in_code_block:
+            for img_match in _IMAGE_RE.finditer(raw_line):
+                images.append(MDImage(
+                    alt_text=_clean(img_match.group(1)),
+                    url=img_match.group(2).strip(),
+                ))
+            raw_line = _IMAGE_RE.sub(lambda m: m.group(1), raw_line)
+            stripped = raw_line.strip()
 
         # ── Table rows ───────────────────────────────────────────────────────
         if '|' in stripped and re.match(r'^\s*\|', raw_line):
@@ -373,4 +394,5 @@ def parse_markdown(content: str) -> ParsedDocument:
         has_tabular_data=bool(tables),
         raw_markdown=raw,
         key_numbers=nums[:20],
+        images=images,
     )

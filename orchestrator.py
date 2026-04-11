@@ -42,12 +42,13 @@ logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_MB = 5
 MAX_FILE_SIZE_B  = MAX_FILE_SIZE_MB * 1024 * 1024
+TEMPLATE_DIR = Path(__file__).parent / 'templates'
 DEFAULT_TEMPLATE_CANDIDATES = (
-    Path(__file__).parent / 'templates' / 'Slide_Master.pptx',
-    Path(__file__).parent / 'templates' / 'Slide Master.pptx',
-    Path(__file__).parent / 'templates' / 'slide_master.pptx',
-    Path(__file__).parent / 'templates' / 'master.pptx',
-    Path(__file__).parent / 'templates' / 'template.pptx',
+    TEMPLATE_DIR / 'Slide_Master.pptx',
+    TEMPLATE_DIR / 'Slide Master.pptx',
+    TEMPLATE_DIR / 'slide_master.pptx',
+    TEMPLATE_DIR / 'master.pptx',
+    TEMPLATE_DIR / 'template.pptx',
 )
 
 MIN_SLIDES = 10
@@ -87,15 +88,27 @@ def validate_input(input_path: str) -> Path:
 
 def resolve_template_path(template_path: str | None) -> Path | None:
     """Resolve an explicit or auto-discovered slide master path."""
-    candidates = [Path(template_path).expanduser().resolve()] if template_path else list(DEFAULT_TEMPLATE_CANDIDATES)
-
-    for candidate in candidates:
+    if template_path:
+        candidate = Path(template_path).expanduser().resolve()
         if candidate.exists() and candidate.is_file() and candidate.suffix.lower() == '.pptx':
             logger.info('Using slide master template: %s', candidate)
             return candidate
-
-    if template_path:
         raise FileNotFoundError(f'Slide master template not found: {template_path}')
+
+    candidates: list[Path] = []
+    # Keep legacy names first, then discover any additional templates in templates/.
+    candidates.extend(DEFAULT_TEMPLATE_CANDIDATES)
+    if TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir():
+        candidates.extend(sorted(TEMPLATE_DIR.glob('*.pptx')))
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists() and candidate.is_file() and candidate.suffix.lower() == '.pptx':
+            logger.info('Auto-detected slide master template: %s', candidate)
+            return candidate
 
     logger.warning('No slide master template found in templates/. Falling back to built-in renderer.')
     return None
@@ -106,6 +119,7 @@ def stage_parse(md_path: Path) -> ParsedDocument:
     t0 = time.time()
     text = md_path.read_text(encoding='utf-8', errors='replace')
     doc  = parse_markdown(text)
+    doc.source_dir = md_path.parent
     logger.info(
         'Stage PARSE completed in %.2fs — %d sections, %d words, has_nums=%s',
         time.time() - t0, len(doc.sections), doc.word_count, doc.has_numerical_data,

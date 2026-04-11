@@ -21,7 +21,11 @@ Modern Design Language: "Meridian Professional"
 from __future__ import annotations
 
 import logging
+import tempfile
+from pathlib import Path
 from typing import List, Optional, Sequence
+from urllib.parse import urlparse
+from urllib.request import urlretrieve
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -391,6 +395,44 @@ def _add_speaker_notes(slide: Slide, notes_text: str) -> None:
         notes_tf.text = notes_text
     except Exception:
         pass
+
+
+def _download_image(url: str) -> Optional[str]:
+    parsed = urlparse(url)
+    if parsed.scheme in {'http', 'https'}:
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(parsed.path).suffix or '.png') as tmp:
+                urlretrieve(url, tmp.name)
+                return tmp.name
+        except Exception:
+            return None
+    path = Path(url)
+    if path.exists():
+        return str(path.resolve())
+    return None
+
+
+def _insert_slide_image(slide: Slide, image_url: str, image_alt: str = '') -> None:
+    if not image_url:
+        return
+
+    image_path = _download_image(image_url)
+    if not image_path:
+        logger.warning('Could not load image for slide: %s', image_url)
+        return
+
+    try:
+        left = T.SLIDE_W - Inches(4.90)
+        top = Inches(1.20)
+        width = Inches(4.60)
+        slide.shapes.add_picture(image_path, left, top, width=width)
+    except Exception as exc:
+        logger.warning('Failed to insert image into slide: %s', exc)
+    finally:
+        try:
+            Path(image_path).unlink()
+        except Exception:
+            pass
 
 
 # ─── Content helpers ──────────────────────────────────────────────────────────
@@ -1082,6 +1124,8 @@ def render_presentation(
                 pass
 
         _add_speaker_notes(slide, bp.speaker_notes)
+        if bp.image_url:
+            _insert_slide_image(slide, bp.image_url, bp.image_alt)
 
     logger.info('Rendered %d slides for "%s"', len(blueprint.slides), deck_title)
     return prs

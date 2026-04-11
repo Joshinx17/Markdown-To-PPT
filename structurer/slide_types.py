@@ -90,6 +90,8 @@ class SlideBlueprint:
     type: SlideType
     title: str
     speaker_notes: str = ''
+    image_url: str = ''
+    image_alt: str = ''
 
     # ── TITLE
     subtitle: str = ''
@@ -187,6 +189,10 @@ def blueprint_from_dict(data: Dict[str, Any]) -> PresentationBlueprint:
 
         # --BODY TEXT
         bp.body_text = s.get('body_text', '') or s.get('text', '')
+
+        # --IMAGES
+        bp.image_url = s.get('image_url', '')
+        bp.image_alt = s.get('image_alt', '')
 
         # --TWO COLUMN
         bp.left_title   = s.get('left_title', '')

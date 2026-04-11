@@ -138,6 +138,32 @@ def _finalize(
     return optimize_blueprint(enforced, doc, min_slides, max_slides)
 
 
+def _attach_images_to_slides(
+    blueprint: PresentationBlueprint,
+    doc: ParsedDocument,
+) -> PresentationBlueprint:
+    if not doc.images:
+        return blueprint
+
+    slides = blueprint.slides
+    image_index = 0
+
+    if slides and slides[0].type == SlideType.TITLE:
+        slides[0].image_url = doc.images[0].url
+        slides[0].image_alt = doc.images[0].alt_text
+        image_index = 1
+
+    for bp in slides[image_index:]:
+        if image_index >= len(doc.images):
+            break
+        bp.image_url = doc.images[image_index].url
+        bp.image_alt = doc.images[image_index].alt_text
+        image_index += 1
+
+    blueprint.slides = slides
+    return blueprint
+
+
 def structure_presentation(
     doc: ParsedDocument,
     api_key: str | None,
@@ -149,7 +175,7 @@ def structure_presentation(
 
     if not api_key:
         logger.warning('No Gemini API key supplied; using rule-based fallback blueprint builder.')
-        return _finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides)
+        return _attach_images_to_slides(_finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides), doc)
 
     md_content = _truncate_markdown(doc.raw_markdown)
     prompt = STRUCTURE_PROMPT.format(
@@ -186,12 +212,12 @@ def structure_presentation(
             logger.warning('Gemini call 2 failed: %s', exc)
 
     if raw is None:
-        return _finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides)
+        return _attach_images_to_slides(_finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides), doc)
 
     try:
         blueprint = blueprint_from_dict(raw)
     except Exception as exc:
         logger.warning('Blueprint deserialisation failed: %s - using fallback', exc)
-        return _finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides)
+        return _attach_images_to_slides(_finalize(_rule_based_fallback(doc, target), doc, min_slides, max_slides), doc)
 
-    return _finalize(blueprint, doc, min_slides, max_slides)
+    return _attach_images_to_slides(_finalize(blueprint, doc, min_slides, max_slides), doc)
